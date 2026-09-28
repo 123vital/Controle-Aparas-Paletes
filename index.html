@@ -91,7 +91,18 @@ th{color:var(--muted);font-family:'IBM Plex Sans',sans-serif;font-weight:600;fon
 .lock-screen.hide{display:none;}
 .lock-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:26px 22px;max-width:320px;width:100%;text-align:center;}
 .lock-card h2{margin:0 0 6px;font-size:16px;}
-.lock-card input{margin-top:16px;}
+.lock-card input{margin-top:16px;}@media (min-width: 860px){
+  body{display:flex;justify-content:center;}
+  .wrap{max-width:900px;padding:28px 32px 48px;}
+  .card{padding:22px 26px;}
+  h1{font-size:18px;}
+  h1 span{font-size:12.5px;}
+  .tab{font-size:13.5px;padding:11px 6px;}
+  .btn{font-size:15px;}
+  .totals{grid-template-columns:1fr 1fr;gap:16px;}
+  table{font-size:13.5px;}
+  .hist-wrap{max-height:420px;}
+}
 </style>
 </head>
 <body>
