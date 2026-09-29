@@ -177,6 +177,9 @@ th{color:var(--muted);font-family:'IBM Plex Sans',sans-serif;font-weight:600;fon
     <label>Peso na balança (kg)</label>
     <input type="number" step="0.1" id="pesoBalancaG" placeholder="0.0">
 
+    <label>Observação (opcional)</label>
+    <input type="text" id="obsG" placeholder="Alguma observação sobre esta pesagem">
+
     <div class="readout">
       <div><div class="lab">Peso líquido</div><div class="val" id="liquidoG">0.0 kg</div></div>
     </div>
@@ -209,11 +212,14 @@ th{color:var(--muted);font-family:'IBM Plex Sans',sans-serif;font-weight:600;fon
       </div>
     </div>
 
-    <label>Quantidade de pilhas (13 paletes cada)</label>
-    <input type="number" id="pilhasP" placeholder="0">
+    <label>Pilha (cada pilha tem 13 paletes de altura)</label>
+    <select id="pilhasP"></select>
 
     <label>Peso na balança (kg)</label>
     <input type="number" step="0.1" id="pesoBalancaP" placeholder="0.0">
+
+    <label>Observação (opcional)</label>
+    <input type="text" id="obsP" placeholder="Alguma observação sobre esta pesagem">
 
     <div class="readout">
       <div><div class="lab">Paletes nesta pesagem</div><div class="val" id="paletesCalc">0</div></div>
@@ -362,10 +368,11 @@ document.getElementById('addG').onclick=()=>{
   const periodo=getPeriodoG(); const tipo=getTipoG();
   let date=todayISO(), time=new Date().toTimeString().slice(0,5);
   if(periodo==='noturno'){ date=document.getElementById('dataG').value||todayISO(); time=document.getElementById('horaG').value||time; }
-  const rec={cat:'gaiola', tipo, periodo, date, time, tara, pesoBalanca:peso, liquido:+(peso-tara).toFixed(2)};
+  const obs=document.getElementById('obsG').value.trim();
+  const rec={cat:'gaiola', tipo, periodo, date, time, tara, pesoBalanca:peso, liquido:+(peso-tara).toFixed(2), obs};
   if(editIndexG!=null){ store.records[editIndexG]=rec; editIndexG=null; document.getElementById('addG').textContent='Somar pesagem'; }
   else { store.records.push(rec); }
-  save(); document.getElementById('pesoBalancaG').value=''; calcLiquidoG(); renderG();
+  save(); document.getElementById('pesoBalancaG').value=''; document.getElementById('obsG').value=''; calcLiquidoG(); renderG();
   showToast('Pesagem somada com sucesso!');
 };
 
@@ -374,6 +381,7 @@ function editG(idx){
   segPeriodoG.set(r.periodo); segTipoG.set(r.tipo);
   document.getElementById('taraSelect').value=r.tara;
   document.getElementById('pesoBalancaG').value=r.pesoBalanca;
+  document.getElementById('obsG').value=r.obs||'';
   if(r.periodo==='noturno'){ document.getElementById('dataG').value=r.date; document.getElementById('horaG').value=r.time||''; }
   calcLiquidoG(); editIndexG=idx;
   document.getElementById('addG').textContent='Salvar alteração';
@@ -393,7 +401,7 @@ function renderG(){
   const list=document.getElementById('listaG');
   if(!recs.length){ list.innerHTML='<div class="empty">Nenhum registro ainda.</div>'; return; }
   const ordered=recs.map(r=>({r,idx:store.records.indexOf(r)})).reverse();
-  list.innerHTML=`<table><thead><tr><th>Data/Hora</th><th>Período</th><th>Material</th><th>Tara</th><th>Balança</th><th>Líquido</th><th></th></tr></thead><tbody>
+  list.innerHTML=`<table><thead><tr><th>Data/Hora</th><th>Período</th><th>Material</th><th>Tara</th><th>Balança</th><th>Líquido</th><th>Observação</th><th></th></tr></thead><tbody>
   ${ordered.map(({r,idx})=>`<tr>
     <td>${r.date}${r.time?' '+r.time:''}</td>
     <td>${r.periodo==='diurno'?'Diurno':'Noturno'}</td>
@@ -401,6 +409,7 @@ function renderG(){
     <td>${r.tara.toFixed(1)}</td>
     <td>${r.pesoBalanca.toFixed(1)}</td>
     <td>${r.liquido.toFixed(1)}</td>
+    <td>${r.obs?r.obs.replace(/</g,'&lt;'):'—'}</td>
     <td class="acts"><button data-e="${idx}">✎</button><button class="del" data-d="${idx}">✕</button></td>
   </tr>`).join('')}</tbody></table>`;
   list.querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>editG(+b.dataset.e));
@@ -409,24 +418,32 @@ function renderG(){
 renderG();
 
 // PALETES
+function fillPilhas(){
+  const sel=document.getElementById('pilhasP'); sel.innerHTML='';
+  for(let i=1;i<=40;i++){ const o=document.createElement('option'); o.value=i; o.textContent='Pilha '+i; sel.appendChild(o); }
+}
+fillPilhas();
+
 function calcPaletes(){
   const pilhas=parseFloat(document.getElementById('pilhasP').value)||0;
   document.getElementById('paletesCalc').textContent=Math.round(pilhas*13);
 }
-document.getElementById('pilhasP').oninput=calcPaletes;
+document.getElementById('pilhasP').onchange=calcPaletes;
+calcPaletes();
 
 let editIndexP=null;
 document.getElementById('addP').onclick=()=>{
   const pilhas=parseFloat(document.getElementById('pilhasP').value);
   const peso=parseFloat(document.getElementById('pesoBalancaP').value);
-  if(!pilhas || !peso){ notify('Informe a quantidade de pilhas e o peso da balança.'); return; }
+  if(!pilhas || !peso){ notify('Informe a pilha e o peso da balança.'); return; }
   const periodo=getPeriodoP();
   let date=todayISO(), time=new Date().toTimeString().slice(0,5);
   if(periodo==='noturno'){ date=document.getElementById('dataP').value||todayISO(); time=document.getElementById('horaP').value||time; }
-  const rec={cat:'palete', periodo, date, time, pilhas, paletes:Math.round(pilhas*13), pesoBalanca:peso};
+  const obs=document.getElementById('obsP').value.trim();
+  const rec={cat:'palete', periodo, date, time, pilhas, paletes:Math.round(pilhas*13), pesoBalanca:peso, obs};
   if(editIndexP!=null){ store.records[editIndexP]=rec; editIndexP=null; document.getElementById('addP').textContent='Somar pesagem'; }
   else { store.records.push(rec); }
-  save(); document.getElementById('pilhasP').value=''; document.getElementById('pesoBalancaP').value=''; calcPaletes(); renderP();
+  save(); document.getElementById('pilhasP').selectedIndex=0; document.getElementById('pesoBalancaP').value=''; document.getElementById('obsP').value=''; calcPaletes(); renderP();
   showToast('Pesagem somada com sucesso!');
 };
 
@@ -435,6 +452,7 @@ function editP(idx){
   segPeriodoP.set(r.periodo);
   document.getElementById('pilhasP').value=r.pilhas;
   document.getElementById('pesoBalancaP').value=r.pesoBalanca;
+  document.getElementById('obsP').value=r.obs||'';
   if(r.periodo==='noturno'){ document.getElementById('dataP').value=r.date; document.getElementById('horaP').value=r.time||''; }
   calcPaletes(); editIndexP=idx;
   document.getElementById('addP').textContent='Salvar alteração';
@@ -450,13 +468,14 @@ function renderP(){
   const list=document.getElementById('listaP');
   if(!recs.length){ list.innerHTML='<div class="empty">Nenhum registro ainda.</div>'; return; }
   const ordered=recs.map(r=>({r,idx:store.records.indexOf(r)})).reverse();
-  list.innerHTML=`<table><thead><tr><th>Data/Hora</th><th>Período</th><th>Pilhas</th><th>Balança</th><th>Paletes</th><th></th></tr></thead><tbody>
+  list.innerHTML=`<table><thead><tr><th>Data/Hora</th><th>Período</th><th>Pilhas</th><th>Balança</th><th>Paletes</th><th>Observação</th><th></th></tr></thead><tbody>
   ${ordered.map(({r,idx})=>`<tr>
     <td>${r.date}${r.time?' '+r.time:''}</td>
     <td>${r.periodo==='diurno'?'Diurno':'Noturno'}</td>
     <td>${r.pilhas}</td>
     <td>${r.pesoBalanca.toFixed(1)}</td>
     <td>${r.paletes}</td>
+    <td>${r.obs?r.obs.replace(/</g,'&lt;'):'—'}</td>
     <td class="acts"><button data-e="${idx}">✎</button><button class="del" data-d="${idx}">✕</button></td>
   </tr>`).join('')}</tbody></table>`;
   list.querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>editP(+b.dataset.e));
@@ -486,10 +505,10 @@ function generateReport(){
       ['Total Plástico', (sum('plastico','diurno')+sum('plastico','noturno')).toFixed(1)+' kg'],
       ['Total Papelão', (sum('papelao','diurno')+sum('papelao','noturno')).toFixed(1)+' kg'],
     ];
-    detailHeaders=['Nome da Apara','Dia','Hora','Tara (kg)','Peso Balança (kg)','Peso Líquido (kg)'];
-    detailBody=recs.map(r=>[r.tipo==='plastico'?'Plástico':'Papelão', r.date, r.time||'—', r.tara.toFixed(1), r.pesoBalanca.toFixed(1), r.liquido.toFixed(1)]);
+    detailHeaders=['Nome da Apara','Dia','Hora','Tara (kg)','Peso Balança (kg)','Peso Líquido (kg)','Observação'];
+    detailBody=recs.map(r=>[r.tipo==='plastico'?'Plástico':'Papelão', r.date, r.time||'—', r.tara.toFixed(1), r.pesoBalanca.toFixed(1), r.liquido.toFixed(1), r.obs||'']);
     const totalLiquido=recs.reduce((s,r)=>s+r.liquido,0);
-    detailBody.push(['TOTAL GERAL','','','','', totalLiquido.toFixed(1)]);
+    detailBody.push(['TOTAL GERAL','','','','', totalLiquido.toFixed(1), '']);
     lastReport={titulo:'Relatório de Gaiolas', periodo:`${ini} a ${end.toISOString().slice(0,10)} (${periodoLabel})`, rows, recs, detailHeaders, detailBody};
   } else {
     const recs=store.records.filter(r=>r.cat==='palete' && inRange(r)).sort((a,b)=>(a.date+((a.time)||'00:00')).localeCompare(b.date+((b.time)||'00:00')));
@@ -503,10 +522,10 @@ function generateReport(){
       ['Total Peso', (sumW('diurno')+sumW('noturno')).toFixed(1)+' kg'],
       ['Total Paletes', sumQ('diurno')+sumQ('noturno')],
     ];
-    detailHeaders=['Dia','Hora','Período','Pilhas','Peso Balança (kg)','Paletes'];
-    detailBody=recs.map(r=>[r.date, r.time||'—', r.periodo==='diurno'?'Diurno':'Noturno', r.pilhas, r.pesoBalanca.toFixed(1), r.paletes]);
+    detailHeaders=['Dia','Hora','Período','Pilhas','Peso Balança (kg)','Paletes','Observação'];
+    detailBody=recs.map(r=>[r.date, r.time||'—', r.periodo==='diurno'?'Diurno':'Noturno', r.pilhas, r.pesoBalanca.toFixed(1), r.paletes, r.obs||'']);
     const totalPeso=recs.reduce((s,r)=>s+r.pesoBalanca,0), totalPal=recs.reduce((s,r)=>s+r.paletes,0);
-    detailBody.push(['TOTAL GERAL','','','', totalPeso.toFixed(1), totalPal]);
+    detailBody.push(['TOTAL GERAL','','','', totalPeso.toFixed(1), totalPal, '']);
     lastReport={titulo:'Relatório de Paletes', periodo:`${ini} a ${end.toISOString().slice(0,10)} (${periodoLabel})`, rows, recs, detailHeaders, detailBody};
   }
   el.innerHTML=`<h2 style="margin-top:16px">${lastReport.titulo} · ${lastReport.periodo}</h2>
