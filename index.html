@@ -91,17 +91,7 @@ th{color:var(--muted);font-family:'IBM Plex Sans',sans-serif;font-weight:600;fon
 .lock-screen.hide{display:none;}
 .lock-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:26px 22px;max-width:320px;width:100%;text-align:center;}
 .lock-card h2{margin:0 0 6px;font-size:16px;}
-.lock-card input{margin-top:16px;}@media (min-width: 860px){
-  .wrap{max-width:900px;padding:28px 32px 48px;}
-  .card{padding:22px 26px;}
-  h1{font-size:18px;}
-  h1 span{font-size:12.5px;}
-  .tab{font-size:13.5px;padding:11px 6px;}
-  .btn{font-size:15px;}
-  .totals{grid-template-columns:1fr 1fr;gap:16px;}
-  table{font-size:13.5px;}
-  .hist-wrap{max-height:420px;}
-}
+.lock-card input{margin-top:16px;}
 </style>
 </head>
 <body>
@@ -157,6 +147,7 @@ th{color:var(--muted);font-family:'IBM Plex Sans',sans-serif;font-weight:600;fon
 <div class="tabs">
   <button class="tab active" data-p="gaiolas">Gaiolas</button>
   <button class="tab" data-p="paletes">Paletes</button>
+  <button class="tab" data-p="descarte">Descarte</button>
   <button class="tab" data-p="relatorios">Relatórios</button>
 </div>
 
@@ -248,12 +239,46 @@ th{color:var(--muted);font-family:'IBM Plex Sans',sans-serif;font-weight:600;fon
   </div>
 </div>
 
+<!-- DESCARTE -->
+<div class="panel" id="p-descarte">
+  <div class="card">
+    <h2>Período</h2>
+    <div class="seg" id="segPeriodoD">
+      <button class="on" data-v="diurno">☀️ Diurno</button>
+      <button data-v="noturno">🌙 Noturno</button>
+    </div>
+    <div id="noturnoFieldsD" style="display:none">
+      <div class="row2">
+        <div><label>Data</label><input type="date" id="dataD"></div>
+        <div><label>Horário da pesagem</label><input type="time" id="horaD"></div>
+      </div>
+    </div>
+
+    <label>Peso na balança (kg)</label>
+    <input type="number" step="0.1" id="pesoBalancaD" placeholder="0.0">
+
+    <label>Observação (opcional)</label>
+    <input type="text" id="obsD" placeholder="Alguma observação sobre este descarte">
+
+    <button class="btn" id="addD">Somar pesagem</button>
+  </div>
+
+  <div class="totals">
+    <div class="tbox"><div class="lab">Total descarte</div><div class="val" id="totDescarte">0.0 kg</div><div class="meta" id="totDescarteCount">0 registros</div></div>
+  </div>
+
+  <div class="card">
+    <h2>Histórico de descarte</h2>
+    <div class="hist-wrap"><div id="listaD"></div></div>
+  </div>
+</div>
+
 <!-- RELATORIOS -->
 <div class="panel" id="p-relatorios">
   <div class="card">
     <h2>Gerar relatório</h2>
     <label>Tipo de registro</label>
-    <select id="relTipoRegistro"><option value="gaiolas">Gaiolas (plástico/papelão)</option><option value="paletes">Paletes</option></select>
+    <select id="relTipoRegistro"><option value="gaiolas">Gaiolas (plástico/papelão)</option><option value="paletes">Paletes</option><option value="descarte">Descarte de Paletes</option></select>
     <label>Data inicial do período</label>
     <input type="date" id="relDataInicio">
     <label>Periodicidade</label>
@@ -334,7 +359,8 @@ function seg(id,cb){ const el=document.getElementById(id); let val=el.querySelec
 let segPeriodoG = seg('segPeriodoG', v=>{ document.getElementById('noturnoFieldsG').style.display = v==='noturno'?'block':'none'; });
 let segTipoG = seg('segTipoG', v=>{ fillTaras(); });
 let segPeriodoP = seg('segPeriodoP', v=>{ document.getElementById('noturnoFieldsP').style.display = v==='noturno'?'block':'none'; });
-const getPeriodoG=()=>segPeriodoG.get(), getTipoG=()=>segTipoG.get(), getPeriodoP=()=>segPeriodoP.get();
+let segPeriodoD = seg('segPeriodoD', v=>{ document.getElementById('noturnoFieldsD').style.display = v==='noturno'?'block':'none'; });
+const getPeriodoG=()=>segPeriodoG.get(), getTipoG=()=>segTipoG.get(), getPeriodoP=()=>segPeriodoP.get(), getPeriodoD=()=>segPeriodoD.get();
 
 function showToast(msg){
   let t=document.getElementById('toast');
@@ -434,9 +460,9 @@ function fillPilhas(){
 }
 fillPilhas();
 
+const PALETES_POR_PILHA=13;
 function calcPaletes(){
-  const pilhas=parseFloat(document.getElementById('pilhasP').value)||0;
-  document.getElementById('paletesCalc').textContent=Math.round(pilhas*13);
+  document.getElementById('paletesCalc').textContent=PALETES_POR_PILHA;
 }
 document.getElementById('pilhasP').onchange=calcPaletes;
 calcPaletes();
@@ -450,7 +476,7 @@ document.getElementById('addP').onclick=()=>{
   let date=todayISO(), time=new Date().toTimeString().slice(0,5);
   if(periodo==='noturno'){ date=document.getElementById('dataP').value||todayISO(); time=document.getElementById('horaP').value||time; }
   const obs=document.getElementById('obsP').value.trim();
-  const rec={cat:'palete', periodo, date, time, pilhas, paletes:Math.round(pilhas*13), pesoBalanca:peso, obs};
+  const rec={cat:'palete', periodo, date, time, pilhas, paletes:PALETES_POR_PILHA, pesoBalanca:peso, obs};
   if(editIndexP!=null){ store.records[editIndexP]=rec; editIndexP=null; document.getElementById('addP').textContent='Somar pesagem'; }
   else { store.records.push(rec); }
   save(); document.getElementById('pilhasP').selectedIndex=0; document.getElementById('pesoBalancaP').value=''; document.getElementById('obsP').value=''; calcPaletes(); renderP();
@@ -493,6 +519,55 @@ function renderP(){
 }
 renderP();
 
+// DESCARTE
+let editIndexD=null;
+document.getElementById('addD').onclick=()=>{
+  const peso=parseFloat(document.getElementById('pesoBalancaD').value);
+  if(!peso){ notify('Informe o peso da balança.'); return; }
+  const periodo=getPeriodoD();
+  let date=todayISO(), time=new Date().toTimeString().slice(0,5);
+  if(periodo==='noturno'){ date=document.getElementById('dataD').value||todayISO(); time=document.getElementById('horaD').value||time; }
+  const obs=document.getElementById('obsD').value.trim();
+  const rec={cat:'descarte', periodo, date, time, pesoBalanca:peso, obs};
+  if(editIndexD!=null){ store.records[editIndexD]=rec; editIndexD=null; document.getElementById('addD').textContent='Somar pesagem'; }
+  else { store.records.push(rec); }
+  save(); document.getElementById('pesoBalancaD').value=''; document.getElementById('obsD').value=''; renderD();
+  showToast('Pesagem somada com sucesso!');
+};
+
+function editD(idx){
+  const r=store.records[idx];
+  segPeriodoD.set(r.periodo);
+  document.getElementById('pesoBalancaD').value=r.pesoBalanca;
+  document.getElementById('obsD').value=r.obs||'';
+  if(r.periodo==='noturno'){ document.getElementById('dataD').value=r.date; document.getElementById('horaD').value=r.time||''; }
+  editIndexD=idx;
+  document.getElementById('addD').textContent='Salvar alteração';
+  document.querySelector('.tab[data-p="descarte"]').click();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function renderD(){
+  const recs=store.records.filter(r=>r.cat==='descarte');
+  const tw=recs.reduce((s,r)=>s+r.pesoBalanca,0);
+  document.getElementById('totDescarte').textContent=tw.toFixed(1)+' kg';
+  document.getElementById('totDescarteCount').textContent=recs.length+(recs.length===1?' registro':' registros');
+  const list=document.getElementById('listaD');
+  if(!recs.length){ list.innerHTML='<div class="empty">Nenhum registro ainda.</div>'; return; }
+  const ordered=recs.map(r=>({r,idx:store.records.indexOf(r)})).reverse();
+  list.innerHTML=`<table><thead><tr><th>Data/Hora</th><th>Período</th><th>Balança</th><th>Observação</th><th></th></tr></thead><tbody>
+  ${ordered.map(({r,idx})=>`<tr>
+    <td>${r.date}${r.time?' '+r.time:''}</td>
+    <td>${r.periodo==='diurno'?'Diurno':'Noturno'}</td>
+    <td>${r.pesoBalanca.toFixed(1)}</td>
+    <td>${r.obs?r.obs.replace(/</g,'&lt;'):'—'}</td>
+    <td class="acts"><button data-e="${idx}">✎</button><button class="del" data-d="${idx}">✕</button></td>
+  </tr>`).join('')}</tbody></table>`;
+  list.querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>editD(+b.dataset.e));
+  list.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{ store.records.splice(+b.dataset.d,1); save(); renderD(); });
+}
+renderD();
+
 // RELATORIOS
 let lastReport=null;
 function generateReport(){
@@ -520,7 +595,7 @@ function generateReport(){
     const totalLiquido=recs.reduce((s,r)=>s+r.liquido,0);
     detailBody.push(['TOTAL GERAL','','','','', totalLiquido.toFixed(1), '']);
     lastReport={titulo:'Relatório de Gaiolas', periodo:`${ini} a ${end.toISOString().slice(0,10)} (${periodoLabel})`, rows, recs, detailHeaders, detailBody};
-  } else {
+  } else if(tipoReg==='paletes'){
     const recs=store.records.filter(r=>r.cat==='palete' && inRange(r)).sort((a,b)=>(a.date+((a.time)||'00:00')).localeCompare(b.date+((b.time)||'00:00')));
     const sumW=per=>recs.filter(r=>r.periodo===per).reduce((s,r)=>s+r.pesoBalanca,0);
     const sumQ=per=>recs.filter(r=>r.periodo===per).reduce((s,r)=>s+r.paletes,0);
@@ -537,6 +612,19 @@ function generateReport(){
     const totalPeso=recs.reduce((s,r)=>s+r.pesoBalanca,0), totalPal=recs.reduce((s,r)=>s+r.paletes,0);
     detailBody.push(['TOTAL GERAL','','','', totalPeso.toFixed(1), totalPal, '']);
     lastReport={titulo:'Relatório de Paletes', periodo:`${ini} a ${end.toISOString().slice(0,10)} (${periodoLabel})`, rows, recs, detailHeaders, detailBody};
+  } else {
+    const recs=store.records.filter(r=>r.cat==='descarte' && inRange(r)).sort((a,b)=>(a.date+((a.time)||'00:00')).localeCompare(b.date+((b.time)||'00:00')));
+    const sumW=per=>recs.filter(r=>r.periodo===per).reduce((s,r)=>s+r.pesoBalanca,0);
+    rows=[
+      ['Peso — Diurno', sumW('diurno').toFixed(1)+' kg'],
+      ['Peso — Noturno', sumW('noturno').toFixed(1)+' kg'],
+      ['Total Peso', (sumW('diurno')+sumW('noturno')).toFixed(1)+' kg'],
+    ];
+    detailHeaders=['Dia','Hora','Período','Peso Balança (kg)','Observação'];
+    detailBody=recs.map(r=>[r.date, r.time||'—', r.periodo==='diurno'?'Diurno':'Noturno', r.pesoBalanca.toFixed(1), r.obs||'']);
+    const totalPeso=recs.reduce((s,r)=>s+r.pesoBalanca,0);
+    detailBody.push(['TOTAL GERAL','','', totalPeso.toFixed(1), '']);
+    lastReport={titulo:'Relatório de Descarte de Paletes', periodo:`${ini} a ${end.toISOString().slice(0,10)} (${periodoLabel})`, rows, recs, detailHeaders, detailBody};
   }
   el.innerHTML=`<h2 style="margin-top:16px">${lastReport.titulo} · ${lastReport.periodo}</h2>
   ${detailBody.length<=1 ? '<div class="empty">Nenhum registro encontrado neste período.</div>' :
