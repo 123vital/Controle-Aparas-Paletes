@@ -403,10 +403,10 @@ setInterval(()=>{
   if(autoDateTimeD) setNowD();
 }, 15000);
 
-let segPeriodoG = seg('segPeriodoG', v=>{});
+let segPeriodoG = seg('segPeriodoG', v=>{ autoDateTimeG=true; setNowG(); });
 let segTipoG = seg('segTipoG', v=>{ fillTaras(); });
-let segPeriodoP = seg('segPeriodoP', v=>{});
-let segPeriodoD = seg('segPeriodoD', v=>{});
+let segPeriodoP = seg('segPeriodoP', v=>{ autoDateTimeP=true; setNowP(); });
+let segPeriodoD = seg('segPeriodoD', v=>{ autoDateTimeD=true; setNowD(); });
 const getPeriodoG=()=>segPeriodoG.get(), getTipoG=()=>segTipoG.get(), getPeriodoP=()=>segPeriodoP.get(), getPeriodoD=()=>segPeriodoD.get();
 
 function showToast(msg){
