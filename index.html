@@ -120,16 +120,31 @@ th{color:var(--muted);font-family:'IBM Plex Sans',sans-serif;font-weight:600;fon
   header .brand{display:none;}
   header{justify-content:flex-end;}
 }
+
+.auth-tabs{display:flex;gap:6px;margin-bottom:14px;}
+.auth-tab{flex:1;padding:9px;border-radius:9px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);font-weight:600;font-size:13px;cursor:pointer;}
+.auth-tab.on{background:var(--accent);border-color:var(--accent);color:var(--accent-text);}
+.lock-card input[type=email],.lock-card input[type=password]{display:block;width:100%;margin-top:10px;padding:11px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);font-size:15px;text-align:left;letter-spacing:normal;}
+.linkbtn{background:none;border:none;color:var(--accent);font-weight:600;font-size:13px;margin-top:12px;cursor:pointer;}
+.authmsg{font-size:12.5px;margin-top:10px;line-height:1.4;}
 </style>
 </head>
 <body>
-<div class="lock-screen" id="lockScreen">
+<div class="lock-screen" id="authScreen">
   <div class="lock-card">
     <h2>Controle de Pesagem</h2>
-    <p class="note">Acesso restrito. Digite o PIN para continuar.</p>
-    <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" id="lockInput" placeholder="PIN" autocomplete="off" style="text-align:center;letter-spacing:6px;font-size:20px">
-    <div id="lockError" style="color:var(--bad);font-size:12.5px;margin-top:8px;display:none">PIN incorreto.</div>
-    <button class="btn" id="lockSubmit">Entrar</button>
+    <div class="auth-tabs">
+      <button class="auth-tab on" data-m="login">Entrar</button>
+      <button class="auth-tab" data-m="signup">Criar conta</button>
+    </div>
+    <input type="email" id="authEmail" placeholder="E-mail" autocomplete="email" autocapitalize="off">
+    <input type="password" id="authSenha" placeholder="Senha" autocomplete="current-password">
+    <div id="codeField" style="display:none">
+      <input type="password" id="authCodigo" placeholder="Código de acesso" autocomplete="off">
+    </div>
+    <div id="authMsg" class="authmsg" style="display:none"></div>
+    <button class="btn" id="authSubmit">Entrar</button>
+    <button class="linkbtn" id="forgotBtn">Esqueci a senha</button>
   </div>
 </div>
 <div class="wrap" id="appWrap" style="display:none">
@@ -169,8 +184,13 @@ th{color:var(--muted);font-family:'IBM Plex Sans',sans-serif;font-weight:600;fon
     </svg>
     <h1>Controle de Pesagem<span>Aparas e Paletes</span></h1>
   </div>
-  <button class="theme-btn" id="themeBtn" aria-label="Alternar tema">🌓</button>
+  <div style="display:flex;gap:8px;align-items:center">
+    <span id="userEmail" style="font-size:11px;color:var(--muted);max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+    <button class="theme-btn" id="logoutBtn" title="Sair" style="width:auto;padding:0 10px;font-size:12px;font-weight:600">Sair</button>
+    <button class="theme-btn" id="themeBtn" aria-label="Alternar tema">🌓</button>
+  </div>
 </header>
+<button class="btn ghost" id="importBtn" style="display:none;margin:0 0 12px">Importar registros antigos</button>
 
 <div class="tabs">
   <button class="tab active" data-p="gaiolas">Gaiolas</button>
@@ -333,35 +353,39 @@ th{color:var(--muted);font-family:'IBM Plex Sans',sans-serif;font-weight:600;fon
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, collection, addDoc, setDoc, deleteDoc, doc as fsDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+// ===== FIREBASE =====
+const firebaseConfig = {
+  apiKey: "AIzaSyBB9Ow7_1WXSwbeKo3k8apgDsiA7Md3yFg",
+  authDomain: "controle-pesagem-3de2d.firebaseapp.com",
+  projectId: "controle-pesagem-3de2d",
+  storageBucket: "controle-pesagem-3de2d.firebasestorage.app",
+  messagingSenderId: "466681750745",
+  appId: "1:466681750745:web:20b0596a4572e9d6358ac8"
+};
+const ACESSO_CODE = 'Japa 123';
+
+const fbApp = initializeApp(firebaseConfig);
+const auth = getAuth(fbApp);
+const db = getFirestore(fbApp);
+
+// ===== HELPERS =====
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const pad = n => String(n).padStart(2,'0');
+const todayISO = ()=>{ const d=new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; };
+const nowTime = ()=>{ const d=new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const sortRecs = arr => arr.slice().sort((a,b)=>((a.date||'')+(a.time||'')).localeCompare((b.date||'')+(b.time||'')));
+
 const TARAS = { plastico:[73.0,73.0,73.2,73.0,73.2,74.0,71.4], papelao:[73.4,73.6,73.0,73.0,73.0,74.2,72.0] };
 let store = { records: [] };
-try{ const s=localStorage.getItem('pesagemStore'); if(s) store=JSON.parse(s); }catch(e){}
-function save(){ try{ localStorage.setItem('pesagemStore', JSON.stringify(store)); }catch(e){} }
-const todayISO = ()=> new Date().toISOString().slice(0,10);
 
-// APP LOCK (PIN required to access the app)
-const APP_PIN='6819';
-const appWrap=document.getElementById('appWrap');
-const lockScreen=document.getElementById('lockScreen');
-const lockInput=document.getElementById('lockInput');
-const lockError=document.getElementById('lockError');
-function showApp(){ lockScreen.classList.add('hide'); appWrap.style.display='block'; }
-function showLock(){ appWrap.style.display='none'; lockScreen.classList.remove('hide'); lockInput.value=''; lockError.style.display='none'; setTimeout(()=>lockInput.focus(),50); }
-function tryUnlock(){
-  if(lockInput.value.replace(/\D/g,'')===APP_PIN){
-    try{ sessionStorage.setItem('pesagemPin','1'); }catch(e){}
-    showApp();
-  } else { lockError.style.display='block'; lockInput.value=''; }
-}
-document.getElementById('lockSubmit').onclick=tryUnlock;
-lockInput.onkeydown=(e)=>{ if(e.key==='Enter') tryUnlock(); };
-let _wasUnlocked=false;
-try{ _wasUnlocked = sessionStorage.getItem('pesagemPin')==='1'; }catch(e){}
-if(_wasUnlocked){ showApp(); } else { showLock(); }
-
-// THEME
-const themeBtn=document.getElementById('themeBtn');
+// ===== TEMA =====
+const themeBtn=$('themeBtn');
 function applyTheme(t){ if(t) document.documentElement.setAttribute('data-theme',t); else document.documentElement.removeAttribute('data-theme'); }
 let savedTheme=null; try{ savedTheme=localStorage.getItem('pesagemTheme'); }catch(e){}
 applyTheme(savedTheme);
@@ -371,52 +395,46 @@ themeBtn.onclick=()=>{
   applyTheme(next); try{localStorage.setItem('pesagemTheme',next);}catch(e){}
 };
 
-// TABS
+// ===== ABAS =====
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
   document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
-  t.classList.add('active'); document.getElementById('p-'+t.dataset.p).classList.add('active');
+  t.classList.add('active'); $('p-'+t.dataset.p).classList.add('active');
 });
 
-// SEGMENTS
-function seg(id,cb){ const el=document.getElementById(id); let val=el.querySelector('.on').dataset.v;
+// ===== BOTÕES SEGMENTADOS =====
+function seg(id,cb){ const el=$(id); let val=el.querySelector('.on').dataset.v;
   function setActive(v){ el.querySelectorAll('button').forEach(b=>b.classList.toggle('on', b.dataset.v===v)); }
   el.querySelectorAll('button').forEach(b=>b.onclick=()=>{ val=b.dataset.v; setActive(val); cb(val); });
   return { get:()=>val, set:(v)=>{ val=v; setActive(v); cb(val); } };
 }
-function nowTime(){ return new Date().toTimeString().slice(0,5); }
-function setNowG(){ document.getElementById('dataG').value=todayISO(); document.getElementById('horaG').value=nowTime(); }
-function setNowP(){ document.getElementById('dataP').value=todayISO(); document.getElementById('horaP').value=nowTime(); }
-function setNowD(){ document.getElementById('dataD').value=todayISO(); document.getElementById('horaD').value=nowTime(); }
+
+// ===== DATA/HORA AUTOMÁTICA =====
+let autoDateTimeG=true, autoDateTimeP=true, autoDateTimeD=true;
+function setNowG(){ $('dataG').value=todayISO(); $('horaG').value=nowTime(); }
+function setNowP(){ $('dataP').value=todayISO(); $('horaP').value=nowTime(); }
+function setNowD(){ $('dataD').value=todayISO(); $('horaD').value=nowTime(); }
+['dataG','horaG'].forEach(id=>$(id).addEventListener('input',()=>{ autoDateTimeG=false; }));
+['dataP','horaP'].forEach(id=>$(id).addEventListener('input',()=>{ autoDateTimeP=false; }));
+['dataD','horaD'].forEach(id=>$(id).addEventListener('input',()=>{ autoDateTimeD=false; }));
+setInterval(()=>{ if(autoDateTimeG) setNowG(); if(autoDateTimeP) setNowP(); if(autoDateTimeD) setNowD(); }, 15000);
 setNowG(); setNowP(); setNowD();
 
-// Mantém Data/Hora atualizadas automaticamente a cada poucos segundos, mas para
-// assim que o usuário mexer manualmente em qualquer um dos campos (para permitir
-// lançar uma pesagem com data/hora retroativa).
-let autoDateTimeG=true, autoDateTimeP=true, autoDateTimeD=true;
-['dataG','horaG'].forEach(id=>document.getElementById(id).addEventListener('input', ()=>{ autoDateTimeG=false; }));
-['dataP','horaP'].forEach(id=>document.getElementById(id).addEventListener('input', ()=>{ autoDateTimeP=false; }));
-['dataD','horaD'].forEach(id=>document.getElementById(id).addEventListener('input', ()=>{ autoDateTimeD=false; }));
-setInterval(()=>{
-  if(autoDateTimeG) setNowG();
-  if(autoDateTimeP) setNowP();
-  if(autoDateTimeD) setNowD();
-}, 15000);
-
-let segPeriodoG = seg('segPeriodoG', v=>{ autoDateTimeG=true; setNowG(); });
-let segTipoG = seg('segTipoG', v=>{ fillTaras(); });
-let segPeriodoP = seg('segPeriodoP', v=>{ autoDateTimeP=true; setNowP(); });
-let segPeriodoD = seg('segPeriodoD', v=>{ autoDateTimeD=true; setNowD(); });
+let segPeriodoG = seg('segPeriodoG', ()=>{ autoDateTimeG=true; setNowG(); });
+let segTipoG = seg('segTipoG', ()=>{ fillTaras(); });
+let segPeriodoP = seg('segPeriodoP', ()=>{ autoDateTimeP=true; setNowP(); });
+let segPeriodoD = seg('segPeriodoD', ()=>{ autoDateTimeD=true; setNowD(); });
 const getPeriodoG=()=>segPeriodoG.get(), getTipoG=()=>segTipoG.get(), getPeriodoP=()=>segPeriodoP.get(), getPeriodoD=()=>segPeriodoD.get();
 
+// ===== AVISOS =====
 function showToast(msg){
-  let t=document.getElementById('toast');
+  let t=$('toast');
   if(!t){ t=document.createElement('div'); t.id='toast'; t.className='toast'; document.body.appendChild(t); }
   t.textContent=msg; t.classList.add('show');
   clearTimeout(window._toastTimer); window._toastTimer=setTimeout(()=>t.classList.remove('show'),2400);
 }
 function notify(msg){
-  let n=document.getElementById('notice');
+  let n=$('notice');
   if(!n){
     n=document.createElement('div'); n.id='notice';
     n.style.cssText='position:fixed;left:50%;top:calc(14px + env(safe-area-inset-top,0px));transform:translateX(-50%) translateY(-10px);background:var(--bad);color:#fff;padding:11px 18px;border-radius:11px;font-size:13.5px;font-weight:600;opacity:0;transition:opacity .25s ease, transform .25s ease;z-index:70;max-width:88%;text-align:center;box-shadow:0 6px 18px rgba(0,0,0,.28);';
@@ -426,48 +444,44 @@ function notify(msg){
   clearTimeout(window._noticeTimer); window._noticeTimer=setTimeout(()=>{ n.style.opacity='0'; n.style.transform='translateX(-50%) translateY(-10px)'; },3400);
 }
 
+// ===== GAIOLAS =====
 function fillTaras(){
-  const tipo=getTipoG(); const sel=document.getElementById('taraSelect'); sel.innerHTML='';
+  const tipo=getTipoG(); const sel=$('taraSelect'); sel.innerHTML='';
   const nome = tipo==='plastico' ? 'Gaiola Plástico' : 'Gaiola Papelão';
   TARAS[tipo].forEach((t,i)=>{ const o=document.createElement('option'); o.value=t; o.textContent=`${nome} ${i+1} — ${t.toFixed(1)} kg`; sel.appendChild(o); });
 }
-fillTaras();
-
 function calcLiquidoG(){
-  const tara=parseFloat(document.getElementById('taraSelect').value)||0;
-  const peso=parseFloat(document.getElementById('pesoBalancaG').value)||0;
+  const tara=parseFloat($('taraSelect').value)||0;
+  const peso=parseFloat($('pesoBalancaG').value)||0;
   const liq=Math.max(peso-tara,0);
-  document.getElementById('liquidoG').textContent=liq.toFixed(1)+' kg';
+  $('liquidoG').textContent=liq.toFixed(1)+' kg';
   return liq;
 }
-document.getElementById('taraSelect').oninput=calcLiquidoG;
-document.getElementById('pesoBalancaG').oninput=calcLiquidoG;
+$('taraSelect').oninput=calcLiquidoG;
+$('pesoBalancaG').oninput=calcLiquidoG;
 
-let editIndexG=null;
-document.getElementById('addG').onclick=()=>{
-  const peso=parseFloat(document.getElementById('pesoBalancaG').value);
+let editIdG=null;
+$('addG').onclick=()=>{
+  const peso=parseFloat($('pesoBalancaG').value);
   if(!peso){ notify('Informe o peso da balança.'); return; }
-  const tara=parseFloat(document.getElementById('taraSelect').value);
-  const periodo=getPeriodoG(); const tipo=getTipoG();
-  const date=document.getElementById('dataG').value||todayISO();
-  const time=document.getElementById('horaG').value||new Date().toTimeString().slice(0,5);
-  const obs=document.getElementById('obsG').value.trim();
+  const tara=parseFloat($('taraSelect').value);
+  const periodo=getPeriodoG(), tipo=getTipoG();
+  const date=$('dataG').value||todayISO(), time=$('horaG').value||nowTime();
+  const obs=$('obsG').value.trim();
   const rec={cat:'gaiola', tipo, periodo, date, time, tara, pesoBalanca:peso, liquido:+(peso-tara).toFixed(2), obs};
-  if(editIndexG!=null){ store.records[editIndexG]=rec; editIndexG=null; document.getElementById('addG').textContent='Somar pesagem'; }
-  else { store.records.push(rec); }
-  save(); document.getElementById('pesoBalancaG').value=''; document.getElementById('obsG').value=''; autoDateTimeG=true; setNowG(); calcLiquidoG(); renderG();
+  saveRecord(rec, editIdG).catch(e=>notify('Não foi possível salvar: '+e.message));
+  editIdG=null; $('addG').textContent='Somar pesagem';
+  $('pesoBalancaG').value=''; $('obsG').value=''; autoDateTimeG=true; setNowG(); calcLiquidoG();
   showToast('Pesagem somada com sucesso!');
 };
 
-function editG(idx){
-  const r=store.records[idx];
+function editG(id){
+  const r=store.records.find(x=>x.id===id); if(!r) return;
   segPeriodoG.set(r.periodo); segTipoG.set(r.tipo);
-  document.getElementById('taraSelect').value=r.tara;
-  document.getElementById('pesoBalancaG').value=r.pesoBalanca;
-  document.getElementById('obsG').value=r.obs||'';
-  document.getElementById('dataG').value=r.date; document.getElementById('horaG').value=r.time||'';
-  calcLiquidoG(); editIndexG=idx;
-  document.getElementById('addG').textContent='Salvar alteração';
+  $('taraSelect').value=r.tara; $('pesoBalancaG').value=r.pesoBalanca; $('obsG').value=r.obs||'';
+  $('dataG').value=r.date; $('horaG').value=r.time||'';
+  autoDateTimeG=false; calcLiquidoG(); editIdG=id;
+  $('addG').textContent='Salvar alteração';
   document.querySelector('.tab[data-p="gaiolas"]').click();
   window.scrollTo({top:0,behavior:'smooth'});
 }
@@ -475,145 +489,248 @@ function editG(idx){
 function renderG(){
   const recs=store.records.filter(r=>r.cat==='gaiola');
   const recsPlastico=recs.filter(r=>r.tipo==='plastico'), recsPapelao=recs.filter(r=>r.tipo==='papelao');
-  const tp=recsPlastico.reduce((s,r)=>s+r.liquido,0);
-  const tc=recsPapelao.reduce((s,r)=>s+r.liquido,0);
-  document.getElementById('totPlastico').textContent=tp.toFixed(1)+' kg';
-  document.getElementById('totPapelao').textContent=tc.toFixed(1)+' kg';
-  document.getElementById('totPlasticoCount').textContent=recsPlastico.length+(recsPlastico.length===1?' registro':' registros');
-  document.getElementById('totPapelaoCount').textContent=recsPapelao.length+(recsPapelao.length===1?' registro':' registros');
-  const list=document.getElementById('listaG');
+  const tp=recsPlastico.reduce((s,r)=>s+Number(r.liquido||0),0);
+  const tc=recsPapelao.reduce((s,r)=>s+Number(r.liquido||0),0);
+  $('totPlastico').textContent=tp.toFixed(1)+' kg';
+  $('totPapelao').textContent=tc.toFixed(1)+' kg';
+  $('totPlasticoCount').textContent=recsPlastico.length+(recsPlastico.length===1?' registro':' registros');
+  $('totPapelaoCount').textContent=recsPapelao.length+(recsPapelao.length===1?' registro':' registros');
+  const list=$('listaG');
   if(!recs.length){ list.innerHTML='<div class="empty">Nenhum registro ainda.</div>'; return; }
-  const ordered=recs.map(r=>({r,idx:store.records.indexOf(r)})).reverse();
   list.innerHTML=`<table><thead><tr><th>Data/Hora</th><th>Período</th><th>Material</th><th>Tara</th><th>Balança</th><th>Líquido</th><th>Observação</th><th></th></tr></thead><tbody>
-  ${ordered.map(({r,idx})=>`<tr>
-    <td>${r.date}${r.time?' '+r.time:''}</td>
+  ${sortRecs(recs).reverse().map(r=>`<tr>
+    <td>${esc(r.date)}${r.time?' '+esc(r.time):''}</td>
     <td>${r.periodo==='diurno'?'Diurno':'Noturno'}</td>
     <td>${r.tipo==='plastico'?'Plástico':'Papelão'}</td>
-    <td>${r.tara.toFixed(1)}</td>
-    <td>${r.pesoBalanca.toFixed(1)}</td>
-    <td>${r.liquido.toFixed(1)}</td>
-    <td>${r.obs?r.obs.replace(/</g,'&lt;'):'—'}</td>
-    <td class="acts"><button data-e="${idx}">✎</button><button class="del" data-d="${idx}">✕</button></td>
+    <td>${Number(r.tara).toFixed(1)}</td>
+    <td>${Number(r.pesoBalanca).toFixed(1)}</td>
+    <td>${Number(r.liquido).toFixed(1)}</td>
+    <td>${r.obs?esc(r.obs):'—'}</td>
+    <td class="acts"><button data-e="${r.id}">✎</button><button class="del" data-d="${r.id}">✕</button></td>
   </tr>`).join('')}</tbody></table>`;
-  list.querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>editG(+b.dataset.e));
-  list.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{ store.records.splice(+b.dataset.d,1); save(); renderG(); });
+  list.querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>editG(b.dataset.e));
+  list.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>removeRecord(b.dataset.d));
 }
-renderG();
 
-// PALETES
+// ===== PALETES =====
 function fillPilhas(){
-  const sel=document.getElementById('pilhasP'); sel.innerHTML='';
+  const sel=$('pilhasP'); sel.innerHTML='';
   for(let i=1;i<=40;i++){ const o=document.createElement('option'); o.value=i; o.textContent='Pilha '+i; sel.appendChild(o); }
 }
 fillPilhas();
-
 const PALETES_POR_PILHA=13;
-function calcPaletes(){
-  document.getElementById('paletesCalc').textContent=PALETES_POR_PILHA;
-}
-document.getElementById('pilhasP').onchange=calcPaletes;
-calcPaletes();
+function calcPaletes(){ $('paletesCalc').textContent=PALETES_POR_PILHA; }
+$('pilhasP').onchange=calcPaletes;
 
-let editIndexP=null;
-document.getElementById('addP').onclick=()=>{
-  const pilhas=parseFloat(document.getElementById('pilhasP').value);
-  const peso=parseFloat(document.getElementById('pesoBalancaP').value);
+let editIdP=null;
+$('addP').onclick=()=>{
+  const pilhas=parseFloat($('pilhasP').value);
+  const peso=parseFloat($('pesoBalancaP').value);
   if(!pilhas || !peso){ notify('Informe a pilha e o peso da balança.'); return; }
   const periodo=getPeriodoP();
-  const date=document.getElementById('dataP').value||todayISO();
-  const time=document.getElementById('horaP').value||new Date().toTimeString().slice(0,5);
-  const obs=document.getElementById('obsP').value.trim();
+  const date=$('dataP').value||todayISO(), time=$('horaP').value||nowTime();
+  const obs=$('obsP').value.trim();
   const rec={cat:'palete', periodo, date, time, pilhas, paletes:PALETES_POR_PILHA, pesoBalanca:peso, obs};
-  if(editIndexP!=null){ store.records[editIndexP]=rec; editIndexP=null; document.getElementById('addP').textContent='Somar pesagem'; }
-  else { store.records.push(rec); }
-  save(); document.getElementById('pilhasP').selectedIndex=0; document.getElementById('pesoBalancaP').value=''; document.getElementById('obsP').value=''; autoDateTimeP=true; setNowP(); calcPaletes(); renderP();
+  saveRecord(rec, editIdP).catch(e=>notify('Não foi possível salvar: '+e.message));
+  editIdP=null; $('addP').textContent='Somar pesagem';
+  $('pilhasP').selectedIndex=0; $('pesoBalancaP').value=''; $('obsP').value=''; autoDateTimeP=true; setNowP(); calcPaletes();
   showToast('Pesagem somada com sucesso!');
 };
 
-function editP(idx){
-  const r=store.records[idx];
+function editP(id){
+  const r=store.records.find(x=>x.id===id); if(!r) return;
   segPeriodoP.set(r.periodo);
-  document.getElementById('pilhasP').value=r.pilhas;
-  document.getElementById('pesoBalancaP').value=r.pesoBalanca;
-  document.getElementById('obsP').value=r.obs||'';
-  document.getElementById('dataP').value=r.date; document.getElementById('horaP').value=r.time||'';
-  calcPaletes(); editIndexP=idx;
-  document.getElementById('addP').textContent='Salvar alteração';
+  $('pilhasP').value=r.pilhas; $('pesoBalancaP').value=r.pesoBalanca; $('obsP').value=r.obs||'';
+  $('dataP').value=r.date; $('horaP').value=r.time||'';
+  autoDateTimeP=false; calcPaletes(); editIdP=id;
+  $('addP').textContent='Salvar alteração';
   document.querySelector('.tab[data-p="paletes"]').click();
   window.scrollTo({top:0,behavior:'smooth'});
 }
 
 function renderP(){
   const recs=store.records.filter(r=>r.cat==='palete');
-  const tw=recs.reduce((s,r)=>s+r.pesoBalanca,0), tq=recs.reduce((s,r)=>s+r.paletes,0);
-  document.getElementById('totPesoPaletes').textContent=tw.toFixed(1)+' kg';
-  document.getElementById('totQtdPaletes').textContent=tq;
-  const list=document.getElementById('listaP');
+  const tw=recs.reduce((s,r)=>s+Number(r.pesoBalanca||0),0), tq=recs.reduce((s,r)=>s+Number(r.paletes||0),0);
+  $('totPesoPaletes').textContent=tw.toFixed(1)+' kg';
+  $('totQtdPaletes').textContent=tq;
+  const list=$('listaP');
   if(!recs.length){ list.innerHTML='<div class="empty">Nenhum registro ainda.</div>'; return; }
-  const ordered=recs.map(r=>({r,idx:store.records.indexOf(r)})).reverse();
   list.innerHTML=`<table><thead><tr><th>Data/Hora</th><th>Período</th><th>Pilhas</th><th>Balança</th><th>Paletes</th><th>Observação</th><th></th></tr></thead><tbody>
-  ${ordered.map(({r,idx})=>`<tr>
-    <td>${r.date}${r.time?' '+r.time:''}</td>
+  ${sortRecs(recs).reverse().map(r=>`<tr>
+    <td>${esc(r.date)}${r.time?' '+esc(r.time):''}</td>
     <td>${r.periodo==='diurno'?'Diurno':'Noturno'}</td>
-    <td>${r.pilhas}</td>
-    <td>${r.pesoBalanca.toFixed(1)}</td>
-    <td>${r.paletes}</td>
-    <td>${r.obs?r.obs.replace(/</g,'&lt;'):'—'}</td>
-    <td class="acts"><button data-e="${idx}">✎</button><button class="del" data-d="${idx}">✕</button></td>
+    <td>${esc(r.pilhas)}</td>
+    <td>${Number(r.pesoBalanca).toFixed(1)}</td>
+    <td>${esc(r.paletes)}</td>
+    <td>${r.obs?esc(r.obs):'—'}</td>
+    <td class="acts"><button data-e="${r.id}">✎</button><button class="del" data-d="${r.id}">✕</button></td>
   </tr>`).join('')}</tbody></table>`;
-  list.querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>editP(+b.dataset.e));
-  list.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{ store.records.splice(+b.dataset.d,1); save(); renderP(); });
+  list.querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>editP(b.dataset.e));
+  list.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>removeRecord(b.dataset.d));
 }
-renderP();
 
-// DESCARTE
-let editIndexD=null;
-document.getElementById('addD').onclick=()=>{
-  const peso=parseFloat(document.getElementById('pesoBalancaD').value);
+// ===== DESCARTE =====
+let editIdD=null;
+$('addD').onclick=()=>{
+  const peso=parseFloat($('pesoBalancaD').value);
   if(!peso){ notify('Informe o peso da balança.'); return; }
   const periodo=getPeriodoD();
-  const date=document.getElementById('dataD').value||todayISO();
-  const time=document.getElementById('horaD').value||new Date().toTimeString().slice(0,5);
-  const obs=document.getElementById('obsD').value.trim();
+  const date=$('dataD').value||todayISO(), time=$('horaD').value||nowTime();
+  const obs=$('obsD').value.trim();
   const rec={cat:'descarte', periodo, date, time, pesoBalanca:peso, obs};
-  if(editIndexD!=null){ store.records[editIndexD]=rec; editIndexD=null; document.getElementById('addD').textContent='Somar pesagem'; }
-  else { store.records.push(rec); }
-  save(); document.getElementById('pesoBalancaD').value=''; document.getElementById('obsD').value=''; autoDateTimeD=true; setNowD(); renderD();
+  saveRecord(rec, editIdD).catch(e=>notify('Não foi possível salvar: '+e.message));
+  editIdD=null; $('addD').textContent='Somar pesagem';
+  $('pesoBalancaD').value=''; $('obsD').value=''; autoDateTimeD=true; setNowD();
   showToast('Pesagem somada com sucesso!');
 };
 
-function editD(idx){
-  const r=store.records[idx];
+function editD(id){
+  const r=store.records.find(x=>x.id===id); if(!r) return;
   segPeriodoD.set(r.periodo);
-  document.getElementById('pesoBalancaD').value=r.pesoBalanca;
-  document.getElementById('obsD').value=r.obs||'';
-  document.getElementById('dataD').value=r.date; document.getElementById('horaD').value=r.time||'';
-  editIndexD=idx;
-  document.getElementById('addD').textContent='Salvar alteração';
+  $('pesoBalancaD').value=r.pesoBalanca; $('obsD').value=r.obs||'';
+  $('dataD').value=r.date; $('horaD').value=r.time||'';
+  autoDateTimeD=false; editIdD=id;
+  $('addD').textContent='Salvar alteração';
   document.querySelector('.tab[data-p="descarte"]').click();
   window.scrollTo({top:0,behavior:'smooth'});
 }
 
 function renderD(){
   const recs=store.records.filter(r=>r.cat==='descarte');
-  const tw=recs.reduce((s,r)=>s+r.pesoBalanca,0);
-  document.getElementById('totDescarte').textContent=tw.toFixed(1)+' kg';
-  document.getElementById('totDescarteCount').textContent=recs.length+(recs.length===1?' registro':' registros');
-  const list=document.getElementById('listaD');
+  const tw=recs.reduce((s,r)=>s+Number(r.pesoBalanca||0),0);
+  $('totDescarte').textContent=tw.toFixed(1)+' kg';
+  $('totDescarteCount').textContent=recs.length+(recs.length===1?' registro':' registros');
+  const list=$('listaD');
   if(!recs.length){ list.innerHTML='<div class="empty">Nenhum registro ainda.</div>'; return; }
-  const ordered=recs.map(r=>({r,idx:store.records.indexOf(r)})).reverse();
   list.innerHTML=`<table><thead><tr><th>Data/Hora</th><th>Período</th><th>Balança</th><th>Observação</th><th></th></tr></thead><tbody>
-  ${ordered.map(({r,idx})=>`<tr>
-    <td>${r.date}${r.time?' '+r.time:''}</td>
+  ${sortRecs(recs).reverse().map(r=>`<tr>
+    <td>${esc(r.date)}${r.time?' '+esc(r.time):''}</td>
     <td>${r.periodo==='diurno'?'Diurno':'Noturno'}</td>
-    <td>${r.pesoBalanca.toFixed(1)}</td>
-    <td>${r.obs?r.obs.replace(/</g,'&lt;'):'—'}</td>
-    <td class="acts"><button data-e="${idx}">✎</button><button class="del" data-d="${idx}">✕</button></td>
+    <td>${Number(r.pesoBalanca).toFixed(1)}</td>
+    <td>${r.obs?esc(r.obs):'—'}</td>
+    <td class="acts"><button data-e="${r.id}">✎</button><button class="del" data-d="${r.id}">✕</button></td>
   </tr>`).join('')}</tbody></table>`;
-  list.querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>editD(+b.dataset.e));
-  list.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{ store.records.splice(+b.dataset.d,1); save(); renderD(); });
+  list.querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>editD(b.dataset.e));
+  list.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>removeRecord(b.dataset.d));
 }
-renderD();
+
+function renderAll(){ renderG(); renderP(); renderD(); }
+
+// ===== GRAVAÇÃO NO FIRESTORE (compartilhado) =====
+const cleanRec = obj => JSON.parse(JSON.stringify(obj));
+async function saveRecord(rec, id){
+  const data = cleanRec({ ...rec, lancadoPor: auth.currentUser ? auth.currentUser.email : '' });
+  if(id) return setDoc(fsDoc(db,'registros',id), data);
+  return addDoc(collection(db,'registros'), data);
+}
+function removeRecord(id){
+  if(!confirm('Excluir este registro?')) return;
+  deleteDoc(fsDoc(db,'registros',id)).catch(e=>notify('Erro ao excluir: '+e.message));
+}
+
+// ===== IMPORTAR DADOS ANTIGOS DO APARELHO (uma vez, sem apagar nada) =====
+const LOCAL_KEY='pesagemStore';
+function localRecords(){
+  try{ const s=JSON.parse(localStorage.getItem(LOCAL_KEY)||'null'); return (s && Array.isArray(s.records)) ? s.records : []; }catch(e){ return []; }
+}
+function updateImportBtn(){
+  const n=localRecords().length;
+  const pending = n>0 && !localStorage.getItem('pesagemImportado');
+  $('importBtn').style.display = pending ? 'block' : 'none';
+  $('importBtn').textContent = `Importar ${n} registro(s) salvos neste aparelho`;
+}
+$('importBtn').onclick=async ()=>{
+  const recs=localRecords(); if(!recs.length) return;
+  if(!confirm(`Enviar ${recs.length} registro(s) deste aparelho para o banco compartilhado? Os dados deste aparelho não serão apagados.`)) return;
+  let n=0;
+  try{
+    for(const r of recs){ const {id, ...rest}=r; await saveRecord(rest, null); n++; }
+    localStorage.setItem('pesagemImportado','1');
+    showToast(`${n} registro(s) importados!`);
+  }catch(e){ notify(`Erro na importação (${n} enviados): `+e.message); }
+  updateImportBtn();
+};
+
+// ===== LOGIN / CADASTRO =====
+let authMode='login';
+function showAuthMsg(t, ok){ const el=$('authMsg'); el.textContent=t; el.style.color=ok?'var(--good)':'var(--bad)'; el.style.display=t?'block':'none'; }
+function setAuthMode(m){
+  authMode=m;
+  document.querySelectorAll('.auth-tab').forEach(b=>b.classList.toggle('on', b.dataset.m===m));
+  $('codeField').style.display = m==='signup' ? 'block' : 'none';
+  $('authSubmit').textContent = m==='signup' ? 'Criar conta' : 'Entrar';
+  $('forgotBtn').style.display = m==='login' ? 'block' : 'none';
+  showAuthMsg('');
+}
+function erroAuth(e){
+  const map={
+    'auth/invalid-email':'E-mail inválido.',
+    'auth/missing-password':'Digite a senha.',
+    'auth/weak-password':'A senha precisa ter pelo menos 6 caracteres.',
+    'auth/email-already-in-use':'Este e-mail já tem conta. Use Entrar.',
+    'auth/invalid-credential':'E-mail ou senha incorretos.',
+    'auth/wrong-password':'E-mail ou senha incorretos.',
+    'auth/user-not-found':'E-mail ou senha incorretos.',
+    'auth/too-many-requests':'Muitas tentativas. Aguarde alguns minutos.',
+    'auth/network-request-failed':'Sem conexão com a internet.',
+    'auth/operation-not-allowed':'Login por e-mail não está ativado no Firebase.',
+    'auth/unauthorized-domain':'Este site não está autorizado no Firebase (Authentication → Settings → Authorized domains).'
+  };
+  return map[e.code] || ('Erro: '+(e.message||e.code));
+}
+document.querySelectorAll('.auth-tab').forEach(b=>b.onclick=()=>setAuthMode(b.dataset.m));
+
+async function doAuth(){
+  const email=$('authEmail').value.trim(), senha=$('authSenha').value;
+  if(!email || !senha){ showAuthMsg('Preencha e-mail e senha.'); return; }
+  try{
+    if(authMode==='signup'){
+      if($('authCodigo').value.trim()!==ACESSO_CODE){ showAuthMsg('Código de acesso incorreto.'); return; }
+      await createUserWithEmailAndPassword(auth,email,senha);
+    } else {
+      await signInWithEmailAndPassword(auth,email,senha);
+    }
+  }catch(e){ showAuthMsg(erroAuth(e)); }
+}
+$('authSubmit').onclick=doAuth;
+['authEmail','authSenha','authCodigo'].forEach(id=>$(id).addEventListener('keydown',e=>{ if(e.key==='Enter') doAuth(); }));
+
+$('forgotBtn').onclick=async ()=>{
+  const email=$('authEmail').value.trim();
+  if(!email){ showAuthMsg('Digite seu e-mail acima para receber o link de redefinição.'); return; }
+  try{
+    await sendPasswordResetEmail(auth,email);
+    showAuthMsg('Enviamos um link para redefinir a senha no seu e-mail.', true);
+  }catch(e){ showAuthMsg(erroAuth(e)); }
+};
+
+$('logoutBtn').onclick=()=>signOut(auth);
+
+// ===== ESTADO DE LOGIN =====
+let unsubRecords=null;
+onAuthStateChanged(auth, user=>{
+  if(user){
+    $('authScreen').classList.add('hide');
+    $('appWrap').style.display='block';
+    $('userEmail').textContent=user.email;
+    if(!unsubRecords){
+      unsubRecords=onSnapshot(collection(db,'registros'), snap=>{
+        store.records=snap.docs.map(d=>({id:d.id, ...d.data()}));
+        renderAll(); updateImportBtn();
+      }, err=>notify('Erro ao carregar dados: '+err.message));
+    }
+  } else {
+    $('authScreen').classList.remove('hide');
+    $('appWrap').style.display='none';
+    if(unsubRecords){ unsubRecords(); unsubRecords=null; }
+    store.records=[];
+    $('authSenha').value=''; $('authCodigo').value='';
+    setAuthMode(authMode);
+  }
+});
+
+// ===== INÍCIO =====
+fillTaras(); calcLiquidoG(); calcPaletes(); setAuthMode('login');
 
 // RELATORIOS
 let lastReport=null;
@@ -762,6 +879,38 @@ function buildPdfDoc(){
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
   doc.setFontSize(14); doc.text(lastReport.titulo, 14, 16);
+  doc.setFontSize(10); doc.text(lastReport.periodo, 14, 23);
+  let y=drawTable(doc, {startY:30, head:lastReport.detailHeaders, body:lastReport.detailBody});
+  y+=10;
+  if(y>doc.internal.pageSize.getHeight()-40){ doc.addPage(); y=20; }
+  doc.setFontSize(11); doc.text('Resumo por período', 14, y); y+=4;
+  drawTable(doc, {startY:y+4, head:['Item','Valor'], body: lastReport.rows.map(r=>[String(r[0]),String(r[1])])});
+  return doc;
+}
+
+document.getElementById('expPdf').onclick=()=>{
+  try{
+  if(!lastReport && !generateReport()) return;
+  const filename=lastReport.titulo.replace(/\s+/g,'_')+'.pdf';
+  const wrap=document.createElement('div'); wrap.innerHTML=reportPreviewHtml();
+  openPreview(lastReport.titulo+' — PDF', wrap, async (dl)=>{
+    const doc=buildPdfDoc();
+    return dl.save({filename, data: doc.output('blob')});
+  });
+  }catch(e){ notify('Erro ao gerar a prévia do PDF: '+e.message); }
+};
+
+// SERVICE WORKER (enables a real "Install app" prompt instead of a plain shortcut).
+// Self-contained via Blob URL — no extra file needed on GitHub Pages.
+if('serviceWorker' in navigator){
+  try{
+    const swCode = "self.addEventListener('install',e=>self.skipWaiting());self.addEventListener('activate',e=>self.clients.claim());self.addEventListener('fetch',e=>{});";
+    const swBlob = new Blob([swCode], {type:'application/javascript'});
+    const swUrl = URL.createObjectURL(swBlob);
+    navigator.serviceWorker.register(swUrl).catch(()=>{});
+  }catch(e){}
+}
+</script>; doc.text(lastReport.titulo, 14, 16);
   doc.setFontSize(10); doc.text(lastReport.periodo, 14, 23);
   let y=drawTable(doc, {startY:30, head:lastReport.detailHeaders, body:lastReport.detailBody});
   y+=10;
