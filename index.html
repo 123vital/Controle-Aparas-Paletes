@@ -141,14 +141,11 @@ body{min-height:0;height:auto;}
 <div class="lock-screen" id="authScreen">
   <div class="lock-card">
     <h2>Controle de Pesagem</h2>
-    <div class="auth-tabs">
-      <button class="auth-tab on" data-m="login">Entrar</button>
-      <button class="auth-tab" data-m="signup">Criar conta</button>
-    </div>
     <input type="email" id="authEmail" placeholder="E-mail" autocomplete="email" autocapitalize="off">
     <input type="password" id="authSenha" placeholder="Senha" autocomplete="current-password">
     <div id="authMsg" class="authmsg" style="display:none"></div>
     <button class="btn" id="authSubmit">Entrar</button>
+    <button class="linkbtn" id="toggleModeBtn">Não tenho conta. Criar conta</button>
     <button class="linkbtn" id="forgotBtn">Esqueci a senha</button>
   </div>
 </div>
@@ -660,8 +657,8 @@ let authMode='login';
 function showAuthMsg(t, ok){ const el=$('authMsg'); el.textContent=t; el.style.color=ok?'var(--good)':'var(--bad)'; el.style.display=t?'block':'none'; }
 function setAuthMode(m){
   authMode=m;
-  document.querySelectorAll('.auth-tab').forEach(b=>b.classList.toggle('on', b.dataset.m===m));
   $('authSubmit').textContent = m==='signup' ? 'Criar conta' : 'Entrar';
+  $('toggleModeBtn').textContent = m==='signup' ? 'Já tenho conta. Entrar' : 'Não tenho conta. Criar conta';
   $('forgotBtn').style.display = m==='login' ? 'block' : 'none';
   showAuthMsg('');
 }
@@ -682,11 +679,13 @@ function erroAuth(e){
   };
   return map[e.code] || 'Não foi possível concluir. Tente novamente.';
 }
-document.querySelectorAll('.auth-tab').forEach(b=>b.onclick=()=>setAuthMode(b.dataset.m));
+$('toggleModeBtn').onclick=()=>setAuthMode(authMode==='login'?'signup':'login');
 
 async function doAuth(){
   const email=$('authEmail').value.trim(), senha=$('authSenha').value;
   if(!email || !senha){ showAuthMsg('Preencha e-mail e senha.'); return; }
+  const btn=$('authSubmit'); const label=btn.textContent;
+  btn.disabled=true; btn.textContent='Aguarde...'; showAuthMsg('');
   try{
     if(authMode==='signup'){
       await createUserWithEmailAndPassword(auth,email,senha);
@@ -694,6 +693,7 @@ async function doAuth(){
       await signInWithEmailAndPassword(auth,email,senha);
     }
   }catch(e){ showAuthMsg(erroAuth(e)); }
+  finally{ btn.disabled=false; btn.textContent=label; }
 }
 $('authSubmit').onclick=doAuth;
 ['authEmail','authSenha'].forEach(id=>$(id).addEventListener('keydown',e=>{ if(e.key==='Enter') doAuth(); }));
