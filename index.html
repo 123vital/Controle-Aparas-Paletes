@@ -147,9 +147,6 @@ body{min-height:0;height:auto;}
     </div>
     <input type="email" id="authEmail" placeholder="E-mail" autocomplete="email" autocapitalize="off">
     <input type="password" id="authSenha" placeholder="Senha" autocomplete="current-password">
-    <div id="codeField" style="display:none">
-      <input type="password" id="authCodigo" placeholder="Código de acesso" autocomplete="off">
-    </div>
     <div id="authMsg" class="authmsg" style="display:none"></div>
     <button class="btn" id="authSubmit">Entrar</button>
     <button class="linkbtn" id="forgotBtn">Esqueci a senha</button>
@@ -375,7 +372,6 @@ const firebaseConfig = {
   messagingSenderId: "466681750745",
   appId: "1:466681750745:web:20b0596a4572e9d6358ac8"
 };
-const ACESSO_CODE = 'Japa 123';
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
@@ -665,7 +661,6 @@ function showAuthMsg(t, ok){ const el=$('authMsg'); el.textContent=t; el.style.c
 function setAuthMode(m){
   authMode=m;
   document.querySelectorAll('.auth-tab').forEach(b=>b.classList.toggle('on', b.dataset.m===m));
-  $('codeField').style.display = m==='signup' ? 'block' : 'none';
   $('authSubmit').textContent = m==='signup' ? 'Criar conta' : 'Entrar';
   $('forgotBtn').style.display = m==='login' ? 'block' : 'none';
   showAuthMsg('');
@@ -681,10 +676,11 @@ function erroAuth(e){
     'auth/user-not-found':'E-mail ou senha incorretos.',
     'auth/too-many-requests':'Muitas tentativas. Aguarde alguns minutos.',
     'auth/network-request-failed':'Sem conexão com a internet.',
+    'auth/user-disabled':'Esta conta está desativada. Fale com o administrador.',
     'auth/operation-not-allowed':'Login por e-mail não está ativado no Firebase.',
     'auth/unauthorized-domain':'Este site não está autorizado no Firebase (Authentication → Settings → Authorized domains).'
   };
-  return map[e.code] || ('Erro: '+(e.message||e.code));
+  return map[e.code] || 'Não foi possível concluir. Tente novamente.';
 }
 document.querySelectorAll('.auth-tab').forEach(b=>b.onclick=()=>setAuthMode(b.dataset.m));
 
@@ -693,7 +689,6 @@ async function doAuth(){
   if(!email || !senha){ showAuthMsg('Preencha e-mail e senha.'); return; }
   try{
     if(authMode==='signup'){
-      if($('authCodigo').value.trim()!==ACESSO_CODE){ showAuthMsg('Código de acesso incorreto.'); return; }
       await createUserWithEmailAndPassword(auth,email,senha);
     } else {
       await signInWithEmailAndPassword(auth,email,senha);
@@ -701,7 +696,7 @@ async function doAuth(){
   }catch(e){ showAuthMsg(erroAuth(e)); }
 }
 $('authSubmit').onclick=doAuth;
-['authEmail','authSenha','authCodigo'].forEach(id=>$(id).addEventListener('keydown',e=>{ if(e.key==='Enter') doAuth(); }));
+['authEmail','authSenha'].forEach(id=>$(id).addEventListener('keydown',e=>{ if(e.key==='Enter') doAuth(); }));
 
 $('forgotBtn').onclick=async ()=>{
   const email=$('authEmail').value.trim();
@@ -732,7 +727,7 @@ onAuthStateChanged(auth, user=>{
     $('appWrap').style.display='none';
     if(unsubRecords){ unsubRecords(); unsubRecords=null; }
     store.records=[];
-    $('authSenha').value=''; $('authCodigo').value='';
+    $('authSenha').value='';
     setAuthMode(authMode);
   }
 });
