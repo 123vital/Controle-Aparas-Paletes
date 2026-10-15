@@ -187,7 +187,6 @@ body{min-height:0;height:auto;}
     <h1>Controle de Pesagem<span>Aparas e Paletes</span></h1>
   </div>
   <div style="display:flex;gap:8px;align-items:center">
-    <span id="userEmail" style="font-size:11px;color:var(--muted);max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
     <button class="theme-btn" id="logoutBtn" title="Sair" style="width:auto;padding:0 10px;font-size:12px;font-weight:600">Sair</button>
     <button class="theme-btn" id="themeBtn" aria-label="Alternar tema">🌓</button>
   </div>
@@ -715,7 +714,6 @@ onAuthStateChanged(auth, user=>{
   if(user){
     $('authScreen').classList.add('hide');
     $('appWrap').style.display='block';
-    $('userEmail').textContent=user.email;
     if(!unsubRecords){
       unsubRecords=onSnapshot(collection(db,'registros'), snap=>{
         store.records=snap.docs.map(d=>({id:d.id, ...d.data()}));
